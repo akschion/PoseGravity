@@ -602,19 +602,19 @@ void generateMatrixSums(std::vector<std::array<T, 3>> &pts2D, std::vector<std::a
  * this method estimates the best camera pose (rotation and translation) relative to the 3D world scene. The given axis
  * prior is assumed ground truth and can be collected from several sources (e.g. image vanishing point, device IMU reading,
  * etc.). If the prior corresponds to an axis other than the world y-axis, one can rotate the frame and features to align
- * that axis with world y-axis and transform the solution(s) back to the original space after. The method accepts both
- * point and line features for detections, although points on average lead to better estimates by this method.
+ * that axis with world y-axis and transform the solution(s) back to the original space after.
  *
- * At minimum, the inputs features must have at least either two points, one point and one line, or three lines. The
- * first two cases are minimal configurations. In those cases, a faster closed-form solution exists, and the algorithm
- * would generally yield two solutions (it may yield less though). Another special case is when all 3D objects
+ * The method accepts both point and line features for detections, although points on average lead to better estimates by
+ * this method. At minimum, the inputs features must have at least either two points, one point and one line, or three
+ * lines. The first two cases are minimal configurations. In those cases, a faster closed-form solution exists, and the
+ * algorithm would generally yield two solutions (it may yield less though). Another special case is when all 3D objects
  * (pts3D, lines3D_v, lines3D_p) have their y-coordinate as 0, i.e. the 3D features lie in a plane orthogonal to the
  * world prior axis. This case is a planar configuration, and a special closed-form solution exists in this case as well
  * always yielding two solutions when a solution is possible. This planar solution is particularly fast and accurate and
  * is recommended if your problem can be phrased in this form. All other scenarios are general configurations and would
  * typically yield a single solution.
  *
- * Method is valid for float and double computation (class T). All inputs must have same type. Double is recommended.
+ * The function is valid for float and double computation (class T). All inputs must have same type. Double is recommended.
  * Flag perform_checks will check small inputs for degeneracy and matrix inversion for full-rank (linear independence
  * of features). Perform_checks will also enable cheirality checking on all point inputs, failing any solution that
  * does not pass the cheirality test on at least half of all points.
