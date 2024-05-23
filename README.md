@@ -24,4 +24,4 @@ For sample code, see `test.cpp`. For other details and tips, see function header
 
 ### Acknowledgements
 
-Thanks to [BallerTV](www.baller.tv) for their continued support of baller research 💯 🏀
+Thanks to [BallerTV](www.ballertv.com) for their continued support of baller research 💯 🏀
