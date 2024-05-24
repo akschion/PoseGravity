@@ -309,7 +309,7 @@ int intersectLineCircle(T &l0, T &l1, T &l2, std::array<std::array<T, 2>, 4> &ro
     T vnorm = l0 * l0 + l1 * l1;
 #endif
     if (fabs(l0) < tol && fabs(l1) < tol) return 0;
-    if (vnorm - 1 > 0 && vnorm - 1 < 10 * tol) { //recover close misses
+    if (vnorm - 1 > 0 && vnorm - 1 < tol) { //recover close misses
         vnorm = 1 / sqrt(vnorm);
         roots[offset] = {l0 * vnorm, l1 * vnorm};
         return 1;
@@ -504,7 +504,7 @@ void generateMatrixSums(std::vector<std::array<T, 3>> &pts2D, std::vector<std::a
     P1 = P[1], P2 = P[2], P4 = P[4], P5 = P[5], P7 = P[7], P8 = P[8];
 
     //finish calculating second term of Omega
-    //omega = sum((Ap + P)^T * Qp * (Ap + P)) = A^T * Omega * A + QASum^T * P when simplified
+    //Omega = sum((Ap + P)^T * Qp * (Ap + P)) = A^T * Omega * A + QASum^T * P when simplified
     Omega0 += fma(QASum0, P[0], fma(QASum3, P[3], QASum6 * P[6]));
     Omega1 += fma(QASum0, P1, fma(QASum3, P4, QASum6 * P7));
     Omega2 += fma(QASum0, P2, fma(QASum3, P5, QASum6 * P8));
@@ -582,7 +582,7 @@ void generateMatrixSums(std::vector<std::array<T, 3>> &pts2D, std::vector<std::a
     P1 = P[1], P2 = P[2], P4 = P[4], P5 = P[5], P7 = P[7], P8 = P[8];
 
     //finish calculating second term of Omega
-    //omega = sum((Ap + P)^T * Qp * (Ap + P)) = A^T * Omega * A + QASum^T * P when simplified
+    //Omega = sum((Ap + P)^T * Qp * (Ap + P)) = A^T * Omega * A + QASum^T * P when simplified
     Omega0 += (QASum0 * P[0]) + (QASum3 * P[3]) + (QASum6 * P[6]);
     Omega1 += (QASum0 * P1) + (QASum3 * P4) + (QASum6 * P7);
     Omega4 += (QASum1 * P1) + (QASum4 * P4) + (QASum7 * P7);
@@ -907,9 +907,9 @@ int estimatePoseWithGravity(std::vector<std::array<T, 3>> &pts2D, std::vector<st
             T &lc0 = loss_conic[0], lc1 = 2 * loss_conic[1], &lc2 = loss_conic[2], lc3 = 2 * loss_conic[3], lc4 = 2 * loss_conic[4];
             T &x = roots[0][0], &y = roots[0][1];
 #if FMA
-            cost_val = fma(lc0, x * x, fma(lc1, x * y, fma(lc2, y * y, fma(lc3, x, fma(lc4, y, loss_conic[5])))));
+            cost_val = std::max(fma(lc0, x * x, fma(lc1, x * y, fma(lc2, y * y, fma(lc3, x, fma(lc4, y, loss_conic[5]))))), T(0));
 #else
-            cost_val = lc0 * (x * x) + lc1 * (x * y) + lc2 * (y * y) + lc3 * x + lc4 * y + loss_conic[5];
+            cost_val = std::max(lc0 * (x * x) + lc1 * (x * y) + lc2 * (y * y) + lc3 * x + lc4 * y + loss_conic[5], T(0));
 #endif
         }
 
@@ -950,7 +950,7 @@ int estimatePoseWithGravity(std::vector<std::array<T, 3>> &pts2D, std::vector<st
                 num_sol = 2;
             }
         }
-        if (cost_val >= T(0)) cost_val = (min_loss / scale) + loss_conic[5]; //store objective function value
+        if (cost_val >= T(0)) cost_val = std::max((min_loss / scale) + loss_conic[5], T(0)); //store objective function value
 
         if (num_sol == 2)
             recoverPose(root, P, R_gravity_alignment, R2, T2);
@@ -1070,6 +1070,7 @@ bool refinePose(std::vector<std::array<T, 3>> &pts2D, std::vector<std::array<T, 
 
     if (cost_val < tol) return true; //nothing to optimize
     if (pts2D.size() + lines2D.size() < 3) return false; //too few parameters to optimize without gravity
+    T tol2 = tol * tol;
 
     std::array<T, 3> gravity = {R[1], R[4], R[7]};
     //find max value to make sure spherical coordinates avoid gimbal lock
@@ -1092,9 +1093,9 @@ bool refinePose(std::vector<std::array<T, 3>> &pts2D, std::vector<std::array<T, 
 
     T delta = sqrt(tol); //derivative estimation step size
     T inv_delta = T(0.5) / delta, inv_delta2 = T(1) / (delta * delta);
-    std::array<std::array<T, 2>, 6> stencil_pts{};
-    stencil_pts[0] = {delta, 0}, stencil_pts[1] = {-delta, 0}, stencil_pts[2] = {0, delta}, stencil_pts[3] = {0, -delta};
-    stencil_pts[4] = {delta, delta}, stencil_pts[5] = {-delta, -delta};
+    std::array<std::array<int, 2>, 6> stencil_pts{};
+    stencil_pts[0] = {2, 1}, stencil_pts[1] = {0, 1}, stencil_pts[2] = {1, 2}, stencil_pts[3] = {1, 0};
+    stencil_pts[4] = {2, 2}, stencil_pts[5] = {0, 0};
     std::array<T, 6> cost_vals = {0., 0., 0., 0., 0., 0.};
     T Hxx, Hyy, Hxy;
     std::array<T, 9> R1{}, R2{};
@@ -1103,16 +1104,17 @@ bool refinePose(std::vector<std::array<T, 3>> &pts2D, std::vector<std::array<T, 
     //Newton iterations in two dimensions (spherical coordinates of gravity vector) using 7 point Hessian stencil
     int i = 0;
     for (; i<max_iterations; i++) {
+        std::array<T, 3> sin_theta = {sin(theta - delta), sin(theta), sin(theta + delta)};
+        std::array<T, 3> cos_theta = {cos(theta - delta), cos(theta), cos(theta + delta)};
+        std::array<T, 3> sin_phi = {sin(phi - delta), sin(phi), sin(phi + delta)};
+        std::array<T, 3> cos_phi = {cos(phi - delta), cos(phi), cos(phi + delta)};
         for (int j=0; j<stencil_pts.size(); j++) {
-            T sin_theta = sin(theta + stencil_pts[j][0]);
+            std::array<int, 2> &pt = stencil_pts[j];
+            T &sint = sin_theta[pt[0]], &cost = cos_theta[pt[0]], &sinp = sin_phi[pt[1]], &cosp = cos_phi[pt[1]];
             if (z_axis) {
-                gravity = {sin_theta * cos(phi + stencil_pts[j][1]),
-                           sin_theta * sin(phi + stencil_pts[j][1]),
-                           cos(theta + stencil_pts[j][0])};
+                gravity = {sint * cosp, sint * sinp, cost};
             } else {
-                gravity = {sin_theta * sin(phi + stencil_pts[j][1]),
-                           cos(theta + stencil_pts[j][0]),
-                           sin_theta * cos(phi + stencil_pts[j][1])};
+                gravity = {sint * sinp, cost, sint * cosp};
             }
             int num_sol = PoseGravity::estimatePoseWithGravity<T, false>(pts2D, pts3D, lines2D, lines3D_v, lines3D_p, gravity, R1, T1, R2, T2, cost_vals[j], v_scale);
 
@@ -1121,45 +1123,35 @@ bool refinePose(std::vector<std::array<T, 3>> &pts2D, std::vector<std::array<T, 
         }
 
         //minimal finite difference method for Hessian and derivative vector
-#if FMA
-        Hxx = inv_delta2 * fma(T(-2), cost_val, cost_vals[0] + cost_vals[1]);
-        Hyy = inv_delta2 * fma(T(-2), cost_val, cost_vals[2] + cost_vals[3]);
-        Hxy = T(0.5) * fma(inv_delta2, T(-2) * cost_val + cost_vals[4] + cost_vals[5], -(Hxx + Hyy));
-        T det = fma(Hxx, Hyy, Hxy * Hxy);
-#else
+        T dx = (cost_vals[0] - cost_vals[1]) * inv_delta;
+        T dy = (cost_vals[2] - cost_vals[3]) * inv_delta;
+        if (dx * dx + dy * dy < tol2) break; //converged
         Hxx = (cost_vals[0] + cost_vals[1] - 2 * cost_val) * inv_delta2;
         Hyy = (cost_vals[2] + cost_vals[3] - 2 * cost_val) * inv_delta2;
         Hxy = T(0.5) * ((cost_vals[4] + cost_vals[5] - 2 * cost_val) * inv_delta2 - Hxx - Hyy);
         T det = Hxx * Hyy - Hxy * Hxy;
-#endif
-        if (fabs(det) < tol) return false; //saddle point
-        T dx = (cost_vals[0] - cost_vals[1]) * inv_delta;
-        T dy = (cost_vals[2] - cost_vals[3]) * inv_delta;
+        if (fabs(det) < tol) return false; //saddle point or other degeneracy
 
         //calculate best direction to move in
-#if FMA
-        T theta_dir = fma(Hyy, dx, -Hxy * dy) / det;
-        T phi_dir = fma(Hxx, dy, -Hxy * dx) / det;
-        if (fma(theta_dir, theta_dir, phi_dir * phi_dir) < tol * tol) break; //converged
-#else
         T theta_dir = (Hyy * dx - Hxy * dy) / det;
         T phi_dir = (Hxx * dy - Hxy * dx) / det;
-        if (theta_dir * theta_dir + phi_dir * phi_dir < tol * tol) break; //converged
-#endif
+        if (theta_dir * theta_dir + phi_dir * phi_dir < tol2) break; //converged
 
         //update values
         theta -= theta_dir;
         phi -= phi_dir;
 
         //evaluate at new point
-        T sin_theta = sin(theta);
+        T sint = sin(theta);
         if (z_axis) {
-            gravity = {sin_theta * cos(phi), sin_theta * sin(phi), cos(theta)};
+            gravity = {sint * cos(phi), sint * sin(phi), cos(theta)};
         } else {
-            gravity = {sin_theta * sin(phi), cos(theta), sin_theta * cos(phi)};
+            gravity = {sint * sin(phi), cos(theta), sint * cos(phi)};
         }
+        T old_cost = cost_val;
         int num_sol = PoseGravity::estimatePoseWithGravity<T, false>(pts2D, pts3D, lines2D, lines3D_v, lines3D_p, gravity, R1, T1, R2, T2, cost_val, v_scale);
         if (num_sol == 0) return false; //something went wrong
+        if (old_cost - cost_val < tol || cost_val < tol) break; //converged
     }
     //store successful solution
     R = R1, Tr = T1;
