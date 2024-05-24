@@ -216,7 +216,7 @@ namespace Matrix3x3 {
         T det = (a * sum1) + (b * sum2) + (c * sum3);
 
         //catch non-invertible matrices
-        if (fabs(det) < (std::is_same<T, double>::value ? DBL_TOL : FLT_TOL))
+        if (perform_checks && fabs(det) < (std::is_same<T, double>::value ? DBL_TOL : FLT_TOL))
             throw std::runtime_error("Matrix is not invertible! Degenerate configuration. If using single precision, try double precision");
 
         det = -1 / det;
@@ -1127,9 +1127,9 @@ bool refinePose(std::vector<std::array<T, 3>> &pts2D, std::vector<std::array<T, 
         Hxy = T(0.5) * fma(inv_delta2, T(-2) * cost_val + cost_vals[4] + cost_vals[5], -(Hxx + Hyy));
         T det = fma(Hxx, Hyy, Hxy * Hxy);
 #else
-        Hxx = (cost_vals[0] + cost_vals[1] - 2 * cost) * inv_delta2;
-        Hyy = (cost_vals[2] + cost_vals[3] - 2 * cost) * inv_delta2;
-        Hxy = T(0.5) * ((cost_vals[4] + cost_vals[5] - 2 * cost) * inv_delta2 - Hxx - Hyy);
+        Hxx = (cost_vals[0] + cost_vals[1] - 2 * cost_val) * inv_delta2;
+        Hyy = (cost_vals[2] + cost_vals[3] - 2 * cost_val) * inv_delta2;
+        Hxy = T(0.5) * ((cost_vals[4] + cost_vals[5] - 2 * cost_val) * inv_delta2 - Hxx - Hyy);
         T det = Hxx * Hyy - Hxy * Hxy;
 #endif
         if (fabs(det) < tol) return false; //saddle point
