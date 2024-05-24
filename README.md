@@ -4,7 +4,7 @@
 
 ### Overview
 
-Solves the absolute camera pose estimation problem with additional partial knowledge of the camera's orientation. This partial knowledge (axis prior) usually comes from a sensor measurement (e.g. IMU accelerometer), a detected vanishing point in the image, or some domain knowledge assumption (e.g. camera is fixed upright on a tripod). The solution can be used by itself or as a quick starting point for general pose estimation.
+Solves the absolute camera pose estimation problem with additional partial knowledge of the camera's orientation. This partial knowledge (axis prior) usually comes from a sensor measurement (e.g. IMU accelerometer), a detected vanishing point in the image, or some domain knowledge assumption (e.g. camera is fixed upright on a tripod). The solution can be used by itself or as a quick starting point for general pose estimation (PnP, PnL, PnPnL).
 
 **Summary of Features:**
 - 🔥 Efficient O(n) runtime with closed-form solution. Typically runs orders of magnitude faster than general purpose solvers
