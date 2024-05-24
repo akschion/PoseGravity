@@ -20,6 +20,8 @@ The algorithm may yield up to two solutions (which can be disambiguated by cheir
 
 `estimatePoseWithGravity()` is the main function implementing the PoseGravity algorithm. Optionally, you can call `refinePose()` (experimental) afterwards on the result to do iterative optimization towards general solution. This approach is often faster than using general purpose solvers.
 
+Defining the compiler flag `FMA=true` will enable the use of C++'s `fma()` calls (recommended).
+
 For sample code, see `test.cpp`. For other details and tips, see function headers for `estimatePoseWithGravity()` and `refinePose()`. Tested with C++14.
 
 ### Acknowledgements
