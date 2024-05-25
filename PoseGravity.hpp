@@ -1100,14 +1100,15 @@ bool refinePose(std::vector<std::array<T, 3>> &pts2D, std::vector<std::array<T, 
     T Hxx, Hyy, Hxy;
     std::array<T, 9> R1{}, R2{};
     std::array<T, 3> T1{}, T2{};
+    T sin_t = sin(theta), cos_t = cos(theta), sin_p = sin(phi), cos_p = cos(phi);
 
     //Newton iterations in two dimensions (spherical coordinates of gravity vector) using 7 point Hessian stencil
     int i = 0;
     for (; i<max_iterations; i++) {
-        std::array<T, 3> sin_theta = {sin(theta - delta), sin(theta), sin(theta + delta)};
-        std::array<T, 3> cos_theta = {cos(theta - delta), cos(theta), cos(theta + delta)};
-        std::array<T, 3> sin_phi = {sin(phi - delta), sin(phi), sin(phi + delta)};
-        std::array<T, 3> cos_phi = {cos(phi - delta), cos(phi), cos(phi + delta)};
+        std::array<T, 3> sin_theta = {sin(theta - delta), sin_t, sin(theta + delta)};
+        std::array<T, 3> cos_theta = {cos(theta - delta), cos_t, cos(theta + delta)};
+        std::array<T, 3> sin_phi = {sin(phi - delta), sin_p, sin(phi + delta)};
+        std::array<T, 3> cos_phi = {cos(phi - delta), cos_p, cos(phi + delta)};
         for (int j=0; j<stencil_pts.size(); j++) {
             std::array<int, 2> &pt = stencil_pts[j];
             T &sint = sin_theta[pt[0]], &cost = cos_theta[pt[0]], &sinp = sin_phi[pt[1]], &cosp = cos_phi[pt[1]];
@@ -1142,11 +1143,11 @@ bool refinePose(std::vector<std::array<T, 3>> &pts2D, std::vector<std::array<T, 
         phi -= phi_dir;
 
         //evaluate at new point
-        T sint = sin(theta);
+        sin_t = sin(theta), cos_t = cos(theta), sin_p = sin(phi), cos_p = cos(phi);
         if (z_axis) {
-            gravity = {sint * cos(phi), sint * sin(phi), cos(theta)};
+            gravity = {sin_t * cos_p, sin_t * sin_p, cos_t};
         } else {
-            gravity = {sint * sin(phi), cos(theta), sint * cos(phi)};
+            gravity = {sin_t * sin_p, cos_t, sin_t * cos_p};
         }
         T old_cost = cost_val;
         int num_sol = PoseGravity::estimatePoseWithGravity<T, false>(pts2D, pts3D, lines2D, lines3D_v, lines3D_p, gravity, R1, T1, R2, T2, cost_val, v_scale);
