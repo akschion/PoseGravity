@@ -123,13 +123,13 @@ namespace Matrix3x3 {
     void negativeInverse(std::array<T, 9> &data, bool perform_checks=false) {
         T &a = data[0], &b = data[1], &c = data[2], &e = data[4], &f = data[5], &i = data[8];
         T sum1 = fma(e, i, -f * f), sum2 = fma(c, f, -b * i), sum3 = fma(b, f, -c * e);
-        T det = a * sum1 + b * sum2 + c * sum3;
+        T det = fma(a, sum1, fma(b, sum2, c * sum3));
 
         //catch non-invertible matrices
         if (perform_checks && fabs(det) < (std::is_same<T, double>::value ? DBL_TOL : FLT_TOL))
             throw std::runtime_error("Matrix is not invertible! Degenerate configuration. If using single precision, try double precision");
 
-        det = -1 / det;
+        det = T(-1) / det;
         sum2 *= det, sum3 *= det;
         T sum4 = det * fma(c, b, -a * f);
 
@@ -219,7 +219,7 @@ namespace Matrix3x3 {
         if (perform_checks && fabs(det) < (std::is_same<T, double>::value ? DBL_TOL : FLT_TOL))
             throw std::runtime_error("Matrix is not invertible! Degenerate configuration. If using single precision, try double precision");
 
-        det = -1 / det;
+        det = T(-1) / det;
         sum2 *= det, sum3 *= det;
         T sum4 = det * ((c * b) - (a * f));
 
@@ -382,14 +382,14 @@ std::array<T, 9> alignGravity(std::array<T, 3> &gravity) {
 /////////////////Pose estimation
 //recover full rotation matrix and translation from root, rotate back to original camera frame
 template <class T>
-void recoverPose(std::array<T, 2> &rot_root, std::array<T, 9> &P, std::array<T, 9> &Rg, std::array<T, 9> &R, std::array<T, 3> &Tr) {
+void recoverPose(std::array<T, 2> &rot_root, std::array<T, 9> &S, std::array<T, 9> &Rg, std::array<T, 9> &R, std::array<T, 3> &Tr) {
     //recover translation
     T &x = rot_root[0], &y = rot_root[1];
     T &t0 = Tr[0], t1 = Tr[1], t2 = Tr[2];
 #if FMA
-    t0 = fma(P[0], x, fma(P[1], y, P[2]));
-    t1 = fma(P[3], x, fma(P[4], y, P[5]));
-    t2 = fma(P[6], x, fma(P[7], y, P[8]));
+    t0 = fma(S[0], x, fma(S[1], y, S[2]));
+    t1 = fma(S[3], x, fma(S[4], y, S[5]));
+    t2 = fma(S[6], x, fma(S[7], y, S[8]));
 
     //rotate pose back to original reference frame
     T &Rg0 = Rg[0], &Rg1 = Rg[1], &Rg2 = Rg[2], &Rg3 = Rg[3], &Rg4 = Rg[4], &Rg5 = Rg[5], &Rg6 = Rg[6], &Rg7 = Rg[7], &Rg8 = Rg[8];
@@ -400,9 +400,9 @@ void recoverPose(std::array<T, 2> &rot_root, std::array<T, 9> &P, std::array<T, 
          fma(Rg1, x, -Rg7 * y), Rg4, fma(Rg1, y, Rg7 * x),
          fma(Rg2, x, -Rg8 * y), Rg5, fma(Rg2, y, Rg8 * x)};
 #else
-    t0 = P[0] * x + P[1] * y + P[2];
-    t1 = P[3] * x + P[4] * y + P[5];
-    t2 = P[6] * x + P[7] * y + P[8];
+    t0 = S[0] * x + S[1] * y + S[2];
+    t1 = S[3] * x + S[4] * y + S[5];
+    t2 = S[6] * x + S[7] * y + S[8];
 
     //rotate pose back to original reference frame
     T &Rg0 = Rg[0], &Rg1 = Rg[1], &Rg2 = Rg[2], &Rg3 = Rg[3], &Rg4 = Rg[4], &Rg5 = Rg[5], &Rg6 = Rg[6], &Rg7 = Rg[7], &Rg8 = Rg[8];
@@ -415,14 +415,14 @@ void recoverPose(std::array<T, 2> &rot_root, std::array<T, 9> &P, std::array<T, 
 #endif
 }
 
-// Calculate loss conic Omega matrix for optimization, P matrix for recovering translation (relabeled S in paper)
+// Calculate loss conic Omega matrix for optimization, S matrix for recovering translation
 template <class T>
 void generateMatrixSums(std::vector<std::array<T, 3>> &pts2D, std::vector<std::array<T, 3>> &pts3D,
                             std::vector<std::array<T, 3>> &lines2D, std::vector<std::array<T, 3>> &lines3D_v,
-                            std::vector<std::array<T, 3>> &lines3D_p, std::array<T, 9> &Rg, std::array<T, 9> &P,
+                            std::vector<std::array<T, 3>> &lines3D_p, std::array<T, 9> &Rg, std::array<T, 9> &S,
                             std::array<T, 6> &Omega, T v_scale, bool perform_checks) {
     int num_pts = pts2D.size(), num_lines = lines2D.size();
-    T P0 = 0, P1 = 0, P2 = 0, P3, P4 = 0, P5 = 0, P6, P7, P8 = 0; //QSum
+    T S0 = 0, S1 = 0, S2 = 0, S3, S4 = 0, S5 = 0, S6, S7, S8 = 0; //QSum
     T QASum0 = 0, QASum1 = 0, QASum2 = 0, QASum3 = 0, QASum4 = 0, QASum5 = 0, QASum6 = 0, QASum7 = 0, QASum8 = 0;
     T Omega0 = 0, Omega1 = 0, Omega2 = 0, Omega4 = 0, Omega5 = 0, Omega8 = 0;
 
@@ -441,7 +441,7 @@ void generateMatrixSums(std::vector<std::array<T, 3>> &pts2D, std::vector<std::a
         T a = fma(Rg0, v0, fma(Rg1, v1, Rg2 * v2)), b = fma(Rg3, v0, fma(Rg4, v1, Rg5 * v2)), c = fma(Rg6, v0, fma(Rg7, v1, Rg8 * v2));
         T a2 = a*a, b2 = b*b, c2 = c*c;
         T Q0 = b2 + c2, Q1 = -a*b, Q2 = -a*c, Q4 = a2 + c2, Q5 = -b*c, Q8 = a2 + b2; //negative skew-symmetric matrix squared
-        P0 += Q0, P1 += Q1, P2 += Q2, P4 += Q4, P5 += Q5, P8 += Q8;
+        S0 += Q0, S1 += Q1, S2 += Q2, S4 += Q4, S5 += Q5, S8 += Q8;
 
         //calculate Q * A and sum with QASum
         T &p = pts3D[i][0], &q = pts3D[i][1], &r = pts3D[i][2];
@@ -452,7 +452,7 @@ void generateMatrixSums(std::vector<std::array<T, 3>> &pts2D, std::vector<std::a
         QASum3 += QA3, QASum4 += QA4, QASum5 += QA5;
         QASum6 += QA6, QASum7 += QA7, QASum8 += QA8;
 
-        //calculate first term (A^T * Omega * A) of Omega symmetric matrix loss. lower triangle is cheaper to calculate but store in upper triangle for consistency
+        //calculate first term (A^T * Q * A) of Omega symmetric matrix loss. lower triangle is cheaper to calculate but store in upper triangle for consistency
         Omega0 += fma(p, QA0, r * QA6), Omega1 += fma(r, QA0, -p * QA6), Omega2 += q * QA3;
         Omega4 += fma(r, QA1, -p * QA7), Omega5 += q * QA4;
         Omega8 += q * QA5;
@@ -464,7 +464,7 @@ void generateMatrixSums(std::vector<std::array<T, 3>> &pts2D, std::vector<std::a
         T &v0 = lines2D[j][0], &v1 = lines2D[j][1], &v2 = lines2D[j][2];
         T a = fma(Rg0, v0, fma(Rg1, v1, Rg2 * v2)), b = fma(Rg3, v0, fma(Rg4, v1, Rg5 * v2)), c = fma(Rg6, v0, fma(Rg7, v1, Rg8 * v2));
         T Q0 = a*a, Q1 = a*b, Q2 = a*c, Q4 = b*b, Q5 = b*c, Q8 = c*c; //self outer matrix
-        P0 += Q0, P1 += Q1, P2 += Q2, P4 += Q4, P5 += Q5, P8 += Q8;
+        S0 += Q0, S1 += Q1, S2 += Q2, S4 += Q4, S5 += Q5, S8 += Q8;
 
         //calculate Q * A and sum with QASum
         T t = lines3D_v[j][0], u = lines3D_v[j][1], v = lines3D_v[j][2], &p = lines3D_p[j][0], &q = lines3D_p[j][1], &r = lines3D_p[j][2];
@@ -476,8 +476,7 @@ void generateMatrixSums(std::vector<std::array<T, 3>> &pts2D, std::vector<std::a
         QASum3 += QA3, QASum4 += QA4, QASum5 += QA5;
         QASum6 += QA6, QASum7 += QA7, QASum8 += QA8;
 
-        //calculate first terms (A^T * Omega * A + V^T * Omega * V) of Omega symmetric matrix loss. lower triangle is cheaper to calculate but store in upper triangle for consistency
-        //first term is not strictly needed, but provides more numerical stability for little compute
+        //calculate first terms (A^T * Q * A + V^T * Q * V) of Omega symmetric matrix loss. lower triangle is cheaper to calculate but store in upper triangle for consistency
         T t2 = t * t, v_2 = v * v, tu = t * u, uv = u * v, tv = t * v, Q2tv_2 = 2 * Q2 * tv;
         Omega0 += fma(p, QA0, fma(r, QA6, fma(Q0, t2, fma(Q8, v_2, Q2tv_2))));
         Omega1 += fma(r, QA0, fma(-p, QA6, fma((Q0 - Q8), tv, (v_2 - t2) * Q2)));
@@ -487,30 +486,30 @@ void generateMatrixSums(std::vector<std::array<T, 3>> &pts2D, std::vector<std::a
         Omega8 += fma(q, QA5, Q4 * u * u);
     }
 
-    //calculate matrix P from total Q sums and Q*A sums
-    // P = -(sum(Qp) + sum(Ql))^-1 * (sum(Qp*Ap) + sum(Ql*Al))
-    P = {P0, P1, P2, 0, P4, P5, 0, 0, P8};
-    PoseGravityUtils::Matrix3x3::negativeInverse(P, perform_checks);
-    P0 = P[0], P1 = P[1], P2 = P[2], P3 = P[3], P4 = P[4], P5 = P[5], P6 = P[6], P7 = P[7], P8 = P[8];
-    P = {fma(P0, QASum0, fma(P1, QASum3, P2 * QASum6)),
-         fma(P0, QASum1, fma(P1, QASum4, P2 * QASum7)),
-         fma(P0, QASum2, fma(P1, QASum5, P2 * QASum8)),
-         fma(P3, QASum0, fma(P4, QASum3, P5 * QASum6)),
-         fma(P3, QASum1, fma(P4, QASum4, P5 * QASum7)),
-         fma(P3, QASum2, fma(P4, QASum5, P5 * QASum8)),
-         fma(P6, QASum0, fma(P7, QASum3, P8 * QASum6)),
-         fma(P6, QASum1, fma(P7, QASum4, P8 * QASum7)),
-         fma(P6, QASum2, fma(P7, QASum5, P8 * QASum8))};
-    P1 = P[1], P2 = P[2], P4 = P[4], P5 = P[5], P7 = P[7], P8 = P[8];
+    //calculate matrix S from total Q sums and Q*A sums
+    // S = -(sum(Qp) + sum(Ql))^-1 * (sum(Qp*Ap) + sum(Ql*Al))
+    S = {S0, S1, S2, 0, S4, S5, 0, 0, S8};
+    PoseGravityUtils::Matrix3x3::negativeInverse(S, perform_checks);
+    S0 = S[0], S1 = S[1], S2 = S[2], S3 = S[3], S4 = S[4], S5 = S[5], S6 = S[6], S7 = S[7], S8 = S[8];
+    S = {fma(S0, QASum0, fma(S1, QASum3, S2 * QASum6)),
+         fma(S0, QASum1, fma(S1, QASum4, S2 * QASum7)),
+         fma(S0, QASum2, fma(S1, QASum5, S2 * QASum8)),
+         fma(S3, QASum0, fma(S4, QASum3, S5 * QASum6)),
+         fma(S3, QASum1, fma(S4, QASum4, S5 * QASum7)),
+         fma(S3, QASum2, fma(S4, QASum5, S5 * QASum8)),
+         fma(S6, QASum0, fma(S7, QASum3, S8 * QASum6)),
+         fma(S6, QASum1, fma(S7, QASum4, S8 * QASum7)),
+         fma(S6, QASum2, fma(S7, QASum5, S8 * QASum8))};
+    S1 = S[1], S2 = S[2], S4 = S[4], S5 = S[5], S7 = S[7], S8 = S[8];
 
     //finish calculating second term of Omega
-    //Omega = sum((Ap + P)^T * Qp * (Ap + P)) = A^T * Omega * A + QASum^T * P when simplified
-    Omega0 += fma(QASum0, P[0], fma(QASum3, P[3], QASum6 * P[6]));
-    Omega1 += fma(QASum0, P1, fma(QASum3, P4, QASum6 * P7));
-    Omega2 += fma(QASum0, P2, fma(QASum3, P5, QASum6 * P8));
-    Omega4 += fma(QASum1, P1, fma(QASum4, P4, QASum7 * P7));
-    Omega5 += fma(QASum1, P2, fma(QASum4, P5, QASum7 * P8));
-    Omega8 += fma(QASum2, P2, fma(QASum5, P5, QASum8 * P8));
+    //Omega += QASum^T * S when simplified
+    Omega0 += fma(QASum0, S[0], fma(QASum3, S[3], QASum6 * S[6]));
+    Omega1 += fma(QASum0, S1, fma(QASum3, S4, QASum6 * S7));
+    Omega2 += fma(QASum0, S2, fma(QASum3, S5, QASum6 * S8));
+    Omega4 += fma(QASum1, S1, fma(QASum4, S4, QASum7 * S7));
+    Omega5 += fma(QASum1, S2, fma(QASum4, S5, QASum7 * S8));
+    Omega8 += fma(QASum2, S2, fma(QASum5, S5, QASum8 * S8));
 #else
     //iterate over points
     for (int i=0; i<num_pts; i++) {
@@ -519,7 +518,7 @@ void generateMatrixSums(std::vector<std::array<T, 3>> &pts2D, std::vector<std::a
         T a = Rg0 * v0 + Rg1 * v1 + Rg2 * v2, b = Rg3 * v0 + Rg4 * v1 + Rg5 * v2, c = Rg6 * v0 + Rg7 * v1 + Rg8 * v2;
         T a2 = a*a, b2 = b*b, c2 = c*c;
         T Q0 = b2 + c2, Q1 = -a*b, Q2 = -a*c, Q4 = a2 + c2, Q5 = -b*c, Q8 = a2 + b2; //negative skew-symmetric matrix squared
-        P0 += Q0, P1 += Q1, P2 += Q2, P4 += Q4, P5 += Q5, P8 += Q8;
+        S0 += Q0, S1 += Q1, S2 += Q2, S4 += Q4, S5 += Q5, S8 += Q8;
 
         //calculate Q * A and sum with QASum
         T &p = pts3D[i][0], &q = pts3D[i][1], &r = pts3D[i][2];
@@ -530,7 +529,7 @@ void generateMatrixSums(std::vector<std::array<T, 3>> &pts2D, std::vector<std::a
         QASum3 += QA3, QASum4 += QA4, QASum5 += QA5;
         QASum6 += QA6, QASum7 += QA7, QASum8 += QA8;
 
-        //calculate first term (A^T * Omega * A) of Omega symmetric matrix loss. lower triangle is cheaper to calculate but store in upper triangle for consistency
+        //calculate first term (A^T * Q * A) of Omega symmetric matrix loss. lower triangle is cheaper to calculate but store in upper triangle for consistency
         Omega0 += (p * QA0) + (r * QA6), Omega1 += (r * QA0) - (p * QA6), Omega2 += q * QA3;
         Omega4 += (r * QA1) - (p * QA7), Omega5 += q * QA4;
         Omega8 += q * QA5;
@@ -542,7 +541,7 @@ void generateMatrixSums(std::vector<std::array<T, 3>> &pts2D, std::vector<std::a
         T &v0 = lines2D[j][0], &v1 = lines2D[j][1], &v2 = lines2D[j][2];
         T a = Rg0 * v0 + Rg1 * v1 + Rg2 * v2, b = Rg3 * v0 + Rg4 * v1 + Rg5 * v2, c = Rg6 * v0 + Rg7 * v1 + Rg8 * v2;
         T Q0 = a*a, Q1 = a*b, Q2 = a*c, Q4 = b*b, Q5 = b*c, Q8 = c*c; //self outer matrix
-        P0 += Q0, P1 += Q1, P2 += Q2, P4 += Q4, P5 += Q5, P8 += Q8;
+        S0 += Q0, S1 += Q1, S2 += Q2, S4 += Q4, S5 += Q5, S8 += Q8;
 
         //calculate Q * A and sum with QASum
         T t = lines3D_v[j][0], u = lines3D_v[j][1], v = lines3D_v[j][2], &p = lines3D_p[j][0], &q = lines3D_p[j][1], &r = lines3D_p[j][2];
@@ -554,8 +553,7 @@ void generateMatrixSums(std::vector<std::array<T, 3>> &pts2D, std::vector<std::a
         QASum3 += QA3, QASum4 += QA4, QASum5 += QA5;
         QASum6 += QA6, QASum7 += QA7, QASum8 += QA8;
 
-        //calculate first terms (A^T * Omega * A + V^T * Omega * V) of Omega symmetric matrix loss. lower triangle is cheaper to calculate but store in upper triangle for consistency
-        //first half (A^T * Omega *A) is not strictly needed, but provides more numerical stability for little compute
+        //calculate first terms (A^T * Q * A + V^T * Q * V) of Omega symmetric matrix loss. lower triangle is cheaper to calculate but store in upper triangle for consistency
         T t2 = t * t, v_2 = v * v, tu = t * u, uv = u * v, tv = t * v, Q2tv_2 = 2 * Q2 * tv;
         Omega0 += (p * QA0) + (r * QA6) + (Q0 * t2) + (Q8 * v_2) + Q2tv_2;
         Omega1 += (r * QA0) - (p * QA6) + ((Q0 - Q8) * tv) + ((v_2 - t2) * Q2);
@@ -565,30 +563,30 @@ void generateMatrixSums(std::vector<std::array<T, 3>> &pts2D, std::vector<std::a
         Omega8 += (q * QA5) + (Q4 * u * u);
     }
 
-    //calculate matrix P from total Q sums and Q*A sums
-    // P = -(sum(Qp) + sum(Ql))^-1 * (sum(Qp*Ap) + sum(Ql*Al))
-    P = {P0, P1, P2, 0, P4, P5, 0, 0, P8};
-    PoseGravityUtils::Matrix3x3::negativeInverse(P);
-    P0 = P[0], P1 = P[1], P2 = P[2], P3 = P[3], P4 = P[4], P5 = P[5], P6 = P[6], P7 = P[7], P8 = P[8];
-    P = {(P0 * QASum0) + (P1 * QASum3) + (P2 * QASum6),
-         (P0 * QASum1) + (P1 * QASum4) + (P2 * QASum7),
-         (P0 * QASum2) + (P1 * QASum5) + (P2 * QASum8),
-         (P3 * QASum0) + (P4 * QASum3) + (P5 * QASum6),
-         (P3 * QASum1) + (P4 * QASum4) + (P5 * QASum7),
-         (P3 * QASum2) + (P4 * QASum5) + (P5 * QASum8),
-         (P6 * QASum0) + (P7 * QASum3) + (P8 * QASum6),
-         (P6 * QASum1) + (P7 * QASum4) + (P8 * QASum7),
-         (P6 * QASum2) + (P7 * QASum5) + (P8 * QASum8)};
-    P1 = P[1], P2 = P[2], P4 = P[4], P5 = P[5], P7 = P[7], P8 = P[8];
+    //calculate matrix S from total Q sums and Q*A sums
+    // S = -(sum(Qp) + sum(Ql))^-1 * (sum(Qp*Ap) + sum(Ql*Al))
+    S = {S0, S1, S2, 0, S4, S5, 0, 0, S8};
+    PoseGravityUtils::Matrix3x3::negativeInverse(S);
+    S0 = S[0], S1 = S[1], S2 = S[2], S3 = S[3], S4 = S[4], S5 = S[5], S6 = S[6], S7 = S[7], S8 = S[8];
+    S = {(S0 * QASum0) + (S1 * QASum3) + (S2 * QASum6),
+         (S0 * QASum1) + (S1 * QASum4) + (S2 * QASum7),
+         (S0 * QASum2) + (S1 * QASum5) + (S2 * QASum8),
+         (S3 * QASum0) + (S4 * QASum3) + (S5 * QASum6),
+         (S3 * QASum1) + (S4 * QASum4) + (S5 * QASum7),
+         (S3 * QASum2) + (S4 * QASum5) + (S5 * QASum8),
+         (S6 * QASum0) + (S7 * QASum3) + (S8 * QASum6),
+         (S6 * QASum1) + (S7 * QASum4) + (S8 * QASum7),
+         (S6 * QASum2) + (S7 * QASum5) + (S8 * QASum8)};
+    S1 = S[1], S2 = S[2], S4 = S[4], S5 = S[5], S7 = S[7], S8 = S[8];
 
     //finish calculating second term of Omega
-    //Omega = sum((Ap + P)^T * Qp * (Ap + P)) = A^T * Omega * A + QASum^T * P when simplified
-    Omega0 += (QASum0 * P[0]) + (QASum3 * P[3]) + (QASum6 * P[6]);
-    Omega1 += (QASum0 * P1) + (QASum3 * P4) + (QASum6 * P7);
-    Omega4 += (QASum1 * P1) + (QASum4 * P4) + (QASum7 * P7);
-    Omega2 += (QASum0 * P2) + (QASum3 * P5) + (QASum6 * P8);
-    Omega5 += (QASum1 * P2) + (QASum4 * P5) + (QASum7 * P8);
-    Omega8 += (QASum2 * P2) + (QASum5 * P5) + (QASum8 * P8);
+    //Omega += QASum^T * S when simplified
+    Omega0 += (QASum0 * S[0]) + (QASum3 * S[3]) + (QASum6 * S[6]);
+    Omega1 += (QASum0 * S1) + (QASum3 * S4) + (QASum6 * S7);
+    Omega4 += (QASum1 * S1) + (QASum4 * S4) + (QASum7 * S7);
+    Omega2 += (QASum0 * S2) + (QASum3 * S5) + (QASum6 * S8);
+    Omega5 += (QASum1 * S2) + (QASum4 * S5) + (QASum7 * S8);
+    Omega8 += (QASum2 * S2) + (QASum5 * S5) + (QASum8 * S8);
 #endif
     T scale = T(1.0) / T(num_pts + num_lines); //scale for better stability
     //avoiding multiplying off diagonals by 2 here since factored into math later
@@ -657,7 +655,7 @@ void generateMatrixSums(std::vector<std::array<T, 3>> &pts2D, std::vector<std::a
  *                      value. Otherwise, this will be skipped.
  *
  * @param v_scale       Tunable parameter balancing line loss terms (rotation and translation parts). Only used if line
- *                      features are present. It's effect is dependent on the problem (some are unaffected, some are
+ *                      features are present. Its effect is dependent on the problem (some are unaffected, some are
  *                      greatly affected). Recommended to be used in planar configurations or if lines3D_v are normalized.
  *                      Otherwise, it's recommended that lines3D_v and lines3D_p have similar magnitudes. Inputting
  *                      v_scale <= 0 will use a default value tuned from experiments.
@@ -709,9 +707,9 @@ int estimatePoseWithGravity(std::vector<std::array<T, 3>> &pts2D, std::vector<st
     std::array<T, 9> R_gravity_alignment = alignGravity(gravity);
 
     //form matrix sums for optimization
-    std::array<T, 9> P; //matrix to recover translation (relabeled S in paper)
+    std::array<T, 9> S; //matrix to recover translation
     std::array<T, 6> loss_conic; //Omega loss function conic, Ax^2 + Bxy + Cy^2 + Dx + Ey + F (returned conic will be missing 2's on off diagonals)
-    generateMatrixSums(pts2D, pts3D, lines2D, lines3D_v, lines3D_p, R_gravity_alignment, P, loss_conic, v_scale, perform_checks);
+    generateMatrixSums(pts2D, pts3D, lines2D, lines3D_v, lines3D_p, R_gravity_alignment, S, loss_conic, v_scale, perform_checks);
 
     std::array<std::array<T, 2>, 4> roots;
     int num_roots = 0;
@@ -898,9 +896,9 @@ int estimatePoseWithGravity(std::vector<std::array<T, 3>> &pts2D, std::vector<st
     if (minimal || planar) {
         //recover solutions
         num_sol = num_roots;
-        recoverPose(roots[0], P, R_gravity_alignment, R1, T1);
+        recoverPose(roots[0], S, R_gravity_alignment, R1, T1);
         if (num_sol == 2)
-            recoverPose(roots[1], P, R_gravity_alignment, R2, T2);
+            recoverPose(roots[1], S, R_gravity_alignment, R2, T2);
 
         //store objective function value
         if (cost_val >= T(0)) {
@@ -936,7 +934,7 @@ int estimatePoseWithGravity(std::vector<std::array<T, 3>> &pts2D, std::vector<st
         }
         //get solution
         num_sol = 1;
-        recoverPose(roots[root_index], P, R_gravity_alignment, R1, T1);
+        recoverPose(roots[root_index], S, R_gravity_alignment, R1, T1);
 
         //in certain situations (e.g. linear dependence, planar configuration, etc), can yield more than one solution in overconstrained problems
         //attempt to find other solution if exists
@@ -953,7 +951,7 @@ int estimatePoseWithGravity(std::vector<std::array<T, 3>> &pts2D, std::vector<st
         if (cost_val >= T(0)) cost_val = std::max((min_loss / scale) + loss_conic[5], T(0)); //store objective function value
 
         if (num_sol == 2)
-            recoverPose(root, P, R_gravity_alignment, R2, T2);
+            recoverPose(root, S, R_gravity_alignment, R2, T2);
     }
 
     //if we have points, we can conduct a cheirality check. Otherwise, with lines only we cannot disambiguate without further assumption
