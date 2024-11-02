@@ -1,4 +1,5 @@
 # PoseGravity
+[![arXiv](https://img.shields.io/badge/arXiv-2405.12646-b31b1b.svg)](https://arxiv.org/abs/2405.12646)
 
 💥 Code for [PoseGravity: Pose Estimation from Points and Lines with Axis Prior](https://doi.org/10.48550/arXiv.2405.12646) 📷 📐 ⬇️ 🌔
 
